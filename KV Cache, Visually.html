@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KV Cache, Visually</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#1c1c1c;--fg:#e8e6e1;--mute:#9a968d;--line:#3a3a3a;--card:#262626;--blue:#58c4dd;--brown:#b98b57;--blueink:#06222b}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#faf8f4;--fg:#26231f;--mute:#6d675d;--line:#d9d3c7;--card:#f0ece3;--blue:#1f8fb0;--brown:#9a6a35;--blueink:#fff}}
+:root[data-theme="light"]{--bg:#faf8f4;--fg:#26231f;--mute:#6d675d;--line:#d9d3c7;--card:#f0ece3;--blue:#1f8fb0;--brown:#9a6a35;--blueink:#fff}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.65 "Latin Modern Roman","CMU Serif",Georgia,"Times New Roman",serif}
+main{max-width:740px;margin:0 auto;padding:48px 20px 96px}
+h1{font-size:2.6rem;line-height:1.15;margin:0 0 8px;color:var(--blue)}
+h2{font-size:1.55rem;margin:56px 0 8px;color:var(--blue)}
+.sub{color:var(--mute);margin:0 0 24px}
+b.k{color:var(--blue)}b.v{color:var(--brown)}
+.mu{color:var(--mute)}
+.eq{background:var(--card);border-radius:8px;padding:14px 16px;margin:14px 0;overflow-x:auto;text-align:center;font-style:italic;font-size:1.05rem;white-space:nowrap}
+.trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0}
+.trio div{background:var(--card);border-radius:8px;padding:12px 14px;border-top:3px solid var(--brown)}
+.trio div:first-child{border-top-color:var(--blue)}
+.trio .big{font-size:1.5rem;display:block}
+.box{border:1px solid var(--line);border-radius:10px;padding:16px;margin:18px 0;background:var(--card)}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+button{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:4px 12px;cursor:pointer}
+button:hover{border-color:var(--blue)}button.on{background:var(--blue);color:var(--blueink);border-color:var(--blue)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.toks{display:flex;gap:8px;justify-content:center;margin:6px 0 12px;flex-wrap:wrap}
+.toks span{padding:2px 10px;border:1px solid var(--line);border-radius:6px;transition:all .4s}
+.toks .a{border-color:var(--blue);color:var(--blue);box-shadow:0 0 12px var(--blue)}.toks .p{border-color:var(--brown);color:var(--brown)}
+.g{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;max-width:440px;margin:auto}
+.g>*{aspect-ratio:1.5;display:grid;place-items:center;border-radius:6px;font-size:.85rem;transition:background .5s,color .5s,box-shadow .5s,opacity .5s}
+.n{background:var(--blue);color:var(--blueink);box-shadow:0 0 14px var(--blue)}
+.c{background:var(--brown);color:#1b1109}
+.e{border:1px dashed var(--line)}.m{color:var(--mute);opacity:.35}
+.hb{color:var(--blue);font-weight:bold}.hc{color:var(--brown)}.hd{color:var(--mute);opacity:.5}
+.leg{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:.85rem;color:var(--mute);margin:12px 0 4px}
+.leg i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+.cap{text-align:center;min-height:3.3em;margin:10px 0 4px}
+.row{display:flex;align-items:center;gap:10px;margin:4px 0;font-size:.95rem}
+.row .l{width:56px;flex:none;text-align:right}.row .r{width:54px;flex:none;font-variant-numeric:tabular-nums}
+.bar{flex:1;height:16px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue);transition:width .6s;border-radius:4px}
+.bar i.br{background:var(--brown)}
+.stat{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin:8px 0 0}
+.stat div{text-align:center}.stat b{display:block;font-size:1.5rem;color:var(--blue)}
+input[type=range]{width:100%;accent-color:var(--blue)}
+details{margin:8px 0}summary{cursor:pointer;color:var(--blue)}details>div{padding:4px 0 4px 16px;border-left:2px solid var(--brown);margin-top:4px}
+pre{background:var(--card);border-radius:8px;padding:12px 14px;overflow-x:auto;font:13px/1.5 ui-monospace,Menlo,monospace}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+<h1>KV Cache, visually</h1>
+<p class="sub">Why we cache <b class="v">K</b> and <b class="v">V</b> during generation, and why we don't cache <b class="k">Q</b>.</p>
+
+<h2>1. What Q, K and V are</h2>
+<div class="eq">Q = X·W<sub>Q</sub> &nbsp; K = X·W<sub>K</sub> &nbsp; V = X·W<sub>V</sub></div>
+<div class="trio">
+<div><span class="big k" style="color:var(--blue)">Q</span>Query: what is this token looking for?<br><span class="mu">Your new question</span></div>
+<div><span class="big" style="color:var(--brown)">K</span>Key: what does this token offer for matching?<br><span class="mu">The library's index</span></div>
+<div><span class="big" style="color:var(--brown)">V</span>Value: what does it contribute if attended to?<br><span class="mu">The book's content</span></div></div>
+<div class="eq">O = softmax( Q·K<sup>T</sup> / √d<sub>k</sub> ) · V</div>
+
+<h2>2. The whole idea in one picture</h2>
+<p>Each row is one token's query asking about earlier keys. Press play and watch what is <b class="k" style="color:var(--blue)">new work</b> and what is <b class="v" style="color:var(--brown)">reused</b>.</p>
+<div class="box">
+<div class="ctl"><button id="play">▶ Play</button><span id="sb"></span><span style="flex:1"></span><button id="cacheT" class="on">KV cache: ON</button></div>
+<div class="toks" id="toks"></div>
+<div class="g" id="g"></div>
+<div class="leg"><span><i style="background:var(--blue)"></i>computed this step</span><span><i style="background:var(--brown)"></i>reused / already done</span><span><i style="border:1px dashed var(--line)"></i>future</span><span>× masked (causal)</span></div>
+<div class="cap" id="cap"></div>
+<div class="stat"><div><b id="s1"></b>K,V projections this step</div><div><b id="s2"></b>total so far</div></div>
+</div>
+<p class="mu">Prefill note: the original prompt is processed in parallel in one pass. Decoding then adds one token at a time, as shown here.</p>
+
+<h3 style="margin-top:28px">What the new query does</h3>
+<div class="box"><div id="att"></div><p class="mu" style="margin:8px 0 0" id="atx"></p></div>
+<p class="mu">Weights are illustrative. Real ones come from softmax(Q·K<sup>T</sup>/√d<sub>k</sub>).</p>
+
+<h2>3. Why old K and V never change</h2>
+<p>A causal transformer masks the future: <i>cat</i> can't attend to <i>sat</i>, <i>on</i> or <i>the</i>. Adding tokens later can't change <i>cat</i>'s hidden state, so at every layer:</p>
+<div class="eq">K<sub>cat</sub> = X<sub>cat</sub>·W<sub>K</sub> &nbsp; V<sub>cat</sub> = X<sub>cat</sub>·W<sub>V</sub> &nbsp; (same every step)</div>
+<p>Without a cache, step 5 recomputes <b class="k" style="color:var(--blue)">K₁:₅ and V₁:₅</b> (and the whole earlier transformer computation). With a cache it computes only K₅, V₅ and appends them.</p>
+<pre>
+                      without cache      with cache
+ key projections      all 5 tokens       token 5 only
+ value projections    all 5 tokens       token 5 only
+ scores for new token Q5 vs 5 keys       same
+ weighted sum         5 values           same
+</pre>
+<div class="box">
+<div class="ctl"><label>Generated tokens N = <b id="nv">16</b></label></div><input id="N" type="range" min="2" max="64" value="16">
+<div class="row"><span class="l">no cache</span><div class="bar"><i id="b1"></i></div><span class="r" id="v1"></span></div>
+<div class="row"><span class="l">cache</span><div class="bar"><i class="br" id="b2"></i></div><span class="r" id="v2"></span></div>
+<p class="mu" style="margin:8px 0 0">K,V projections over N steps: N(N+1)/2 without a cache, N with one. The gap grows quadratically.</p></div>
+
+<h2>4. Why we don't cache Q</h2>
+<p>The new token needs a <i>fresh</i> question: <b class="k" style="color:var(--blue)">Q₅</b> against all keys, then a weighted sum of all values:</p>
+<div class="eq">O<sub>5</sub> = softmax( Q<sub>5</sub>·K<sub>1:5</sub><sup>T</sup> / √d<sub>k</sub> ) · V<sub>1:5</sub></div>
+<p>Q₁…Q₄ already produced their outputs (the brown rows in the picture). Nothing later reads them, so caching them wastes memory. K and V are different: every future query reads them.</p>
+<div class="box"><b>Library analogy.</b> You bring a new question each time (Q). The index (K) and the books (V) stay on the shelf so you don't rebuild them.</div>
+
+<h2>5. The catch: attention still looks at everything</h2>
+<p>The cache removes recomputation of the past, not attention to the past. Each new token still does work proportional to n per layer, and the cache must live in memory.</p>
+<div class="eq">KV bytes = 2 × layers × KV heads × d<sub>head</sub> × tokens × bytes</div>
+<div class="box">
+<div class="row"><span class="l" style="width:110px">layers <b id="la"></b></span><input id="L" type="range" min="1" max="80" value="32"></div>
+<div class="row"><span class="l" style="width:110px">KV heads <b id="ha"></b></span><input id="H" type="range" min="1" max="64" value="32"></div>
+<div class="row"><span class="l" style="width:110px">d<sub>head</sub> <b id="da"></b></span><input id="D" type="range" min="64" max="256" step="64" value="128"></div>
+<div class="row"><span class="l" style="width:110px">tokens <b id="ta"></b></span><input id="S" type="range" min="512" max="32768" step="512" value="4096"></div>
+<div class="stat"><div><b id="gb"></b>per sequence (fp16)</div></div>
+<p class="mu" style="margin:8px 0 0">Defaults give about 2 GiB for one 4,096-token sequence. Serve many users and the cache dominates GPU memory. Fewer KV heads (grouped-query attention) shrinks it directly.</p></div>
+
+<h2>Takeaways</h2>
+<ul><li>New token: compute Q, K, V once; append K, V to the cache.</li>
+<li>Cache <b>K, V</b>: every future query needs the past tokens' keys (to score) and values (to mix).</li>
+<li>Skip <b>Q</b>: old queries already did their job.</li>
+<li>Saves recomputation, not attention work. Costs memory that grows with length, layers and heads.</li></ul>
+<details><summary>Interview check</summary><div>
+<p><b>Why does a token's K stay fixed?</b> Causal masking: its hidden state depends only on earlier tokens.</p>
+<p><b>Why is decoding memory-bound?</b> Each step reads the whole cache for little arithmetic.</p>
+<p><b>How to shrink the cache?</b> Grouped-query or multi-query attention, quantized KV, sliding windows, paged allocation.</p></div></details>
+</main>
+<script>
+const $=s=>document.querySelector(s),sub=n=>'<sub>'+n+'</sub>';
+const T=['The','cat','sat','on','the'],N=5;let s=1,cache=true,tm;
+$('#sb').innerHTML=T.map((_,i)=>`<button data-s="${i+1}">${i+1}</button>`).join(' ');
+$('#sb').onclick=e=>{const b=e.target.closest('button');if(b){stop();s=+b.dataset.s;draw()}};
+function stop(){clearInterval(tm);tm=0;$('#play').textContent='▶ Play'}
+$('#play').onclick=()=>{if(tm){stop();return}$('#play').textContent='⏸ Pause';s=1;draw();tm=setInterval(()=>{if(s<N){s++;draw()}else stop()},1600)};
+$('#cacheT').onclick=()=>{cache=!cache;$('#cacheT').textContent='KV cache: '+(cache?'ON':'OFF');$('#cacheT').classList.toggle('on',cache);draw()};
+function draw(){
+  [...$('#sb').children].forEach(b=>b.classList.toggle('on',+b.dataset.s==s));
+  $('#toks').innerHTML=T.map((t,i)=>`<span class="${i+1==s?'a':i+1<s?'p':''}" style="${i+1>s?'opacity:.35':''}">${t}</span>`).join('');
+  let h='<span></span>';
+  for(let j=1;j<=N;j++){const c=j>s?'hd':(cache?(j==s?'hb':'hc'):'hb');h+=`<span class="${c}">K${sub(j)}</span>`}
+  for(let i=1;i<=N;i++){
+    const rc=i>s?'hd':(cache?(i==s?'hb':'hc'):'hb');h+=`<span class="${rc}">Q${sub(i)}</span>`;
+    for(let j=1;j<=N;j++){let c;
+      if(j>i)c='m';else if(i>s)c='e';else if(!cache)c='n';else c=i==s?'n':'c';
+      h+=`<span class="${c}">${j>i?'×':''}</span>`}}
+  $('#g').innerHTML=h;
+  $('#cap').innerHTML=cache
+   ?`Step ${s}: process “${T[s-1]}”. Compute Q${sub(s)}, K${sub(s)}, V${sub(s)}; reuse ${s>1?`K${sub('1:'+(s-1))}, V${sub('1:'+(s-1))} from the cache`:'nothing yet'}. Earlier query rows are finished.`
+   :`Step ${s}, no cache: every token's K and V is recomputed from scratch, again.`;
+  $('#s1').textContent=cache?1:s;$('#s2').textContent=cache?s:s*(s+1)/2;
+  // attention
+  const sc=[];for(let j=1;j<=s;j++)sc.push(Math.exp(Math.sin(j*1.7+s*.9)*1.5));
+  const z=sc.reduce((a,b)=>a+b,0);
+  $('#att').innerHTML=sc.map((v,j)=>`<div class="row"><span class="l">${T[j]}</span><div class="bar"><i style="width:${v/z*100}%"></i></div><span class="r">${(v/z).toFixed(2)}</span></div>`).join('');
+  $('#atx').innerHTML=`O${sub(s)} = ${sc.map((v,j)=>`${(v/z).toFixed(2)}·V${sub(j+1)}`).join(' + ')}`;
+}
+draw();
+// cost
+function cost(){const n=+$('#N').value;$('#nv').textContent=n;const a=n*(n+1)/2;
+  $('#b1').style.width='100%';$('#b2').style.width=Math.max(1.5,n/a*100)+'%';$('#v1').textContent=a;$('#v2').textContent=n}
+$('#N').oninput=cost;cost();
+// memory
+function mem(){const L=+$('#L').value,H=+$('#H').value,D=+$('#D').value,S=+$('#S').value;
+  $('#la').textContent=L;$('#ha').textContent=H;$('#da').textContent=D;$('#ta').textContent=S.toLocaleString();
+  const g=2*L*H*D*S*2/2**30;$('#gb').textContent=(g<10?g.toFixed(2):g.toFixed(1))+' GiB'}
+['L','H','D','S'].forEach(i=>$('#'+i).oninput=mem);mem();
+</script>
+</body>
+</html>
